@@ -836,9 +836,7 @@ class Query:
         )
 
     # DevGoal: put back in the kwargs here so that people can just call download granules with subset=False!
-    def download_granules(
-        self, path, verbose=False, subset=True, restart=False, **kwargs
-    ):  # , extract=False):
+    def download_granules(self, path, verbose=False, subset=True, restart=False, **kwargs):
         """
         Downloads the data ordered using order_granules.
 
@@ -898,7 +896,7 @@ class Query:
             ):
                 self.order_granules(verbose=verbose, subset=subset, **kwargs)
 
-        self._granules.download(verbose, path, session=self._session, restart=restart)
+        self._granules.download(verbose, path, session=self._session, restart=restart, **kwargs)
 
     # DevGoal: add testing? What do we test, and how, given this is a visualization.
     # DevGoal(long term): modify this to accept additional inputs, etc.
