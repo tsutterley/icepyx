@@ -4,6 +4,7 @@ import h5py
 import zarr
 import pandas
 import itertools
+import posixpath
 import numpy as np
 
 class convert():
@@ -265,30 +266,45 @@ class convert():
         # for each valid beam within the HDF5 file
         frames = []
         for gtx in sorted(beams):
-            # create a column stack of valid output segment values
+            # set variable parameters to read for specific products
             if (PRD == 'ATL06'):
+                # land ice height
                 var = source[gtx]['land_ice_segments']
                 valid, = np.nonzero(var['h_li'][:] != var['h_li'].fillvalue)
                 # variables for the output dataframe
                 vnames = ['segment_id','delta_time','latitude','longitude',
                     'h_li','h_li_sigma','atl06_quality_summary']
-                # extract data to dictionary
-                data = {}
-                # convert data to numpy array for backwards HDF5 compatibility
-                for v in vnames:
-                    values = np.copy(var[v][:])
-                    data[v] = values[valid]
-                # copy filename parameters
-                data['rgt'] = [TRK]*len(valid)
-                data['cycle'] = [CYCL]*len(valid)
-                # copy beam-level attributes
-                attrs = ['groundtrack_id','atlas_spot_number','atlas_beam_type',
-                    'sc_orientation','atmosphere_profile','atlas_pce']
-                for att_name in attrs:
-                    att_val=self.attributes_encoder(source[gtx].attrs[att_name])
-                    data[att_name] = [att_val]*len(valid)
-                # pandas dataframe from compiled dictionary
-                frames.append(pandas.DataFrame.from_dict(data))
+            elif (PRD == 'ATL08'):
+                # land and vegetation height
+                var = source[gtx]['land_segments']
+                valid, = np.nonzero(var['terrain/h_te_best_fit'][:] !=
+                    var['terrain/h_te_best_fit'].fillvalue)
+                # variables for the output dataframe
+                vnames = ['segment_id_beg','segment_id_end','delta_time',
+                    'latitude','longitude','brightness_flag','layer_flag',
+                    'msw_flag','night_flag','terrain_flg','urban_flag',
+                    'segment_landcover','segment_snowcover','segment_watermask',
+                    'terrain/h_te_best_fit','terrain/h_te_uncertainty',
+                    'terrain/terrain_slope','terrain/n_te_photons',
+                    'canopy/h_canopy','canopy/h_canopy_uncertainty',
+                    'canopy/canopy_flag','canopy/n_ca_photons']
+            # create a dictionary of valid output segment values
+            data = {}
+            # convert data to numpy array for backwards HDF5 compatibility
+            for v in vnames:
+                values = np.copy(var[v][:])
+                data[posixpath.basename(v)] = values[valid]
+            # copy filename parameters
+            data['rgt'] = [TRK]*len(valid)
+            data['cycle'] = [CYCL]*len(valid)
+            # copy beam-level attributes
+            attrs = ['groundtrack_id','atlas_spot_number','atlas_beam_type',
+                'sc_orientation','atmosphere_profile','atlas_pce']
+            for att_name in attrs:
+                att_val=self.attributes_encoder(source[gtx].attrs[att_name])
+                data[att_name] = [att_val]*len(valid)
+            # pandas dataframe from compiled dictionary
+            frames.append(pandas.DataFrame.from_dict(data))
         # return the concatenated pandas dataframe
         return pandas.concat(frames)
 
