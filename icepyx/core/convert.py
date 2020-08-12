@@ -2,15 +2,22 @@ import os
 import re
 import h5py
 import zarr
+import pandas
 import itertools
 import numpy as np
 
 class convert():
     np.seterr(invalid='ignore')
-    def __init__(self, filename=None, directory='', reformat=None, **kwds):
+    def __init__(self, filename=None, directory='', reformat=None):
         self.filename = filename
         self.directory = os.path.expanduser(directory)
         self.reformat = reformat
+
+    # PURPOSE: wrapper function for converting HDF5 files to another type
+    def file_converter(self, **kwds):
+        """
+        Locally convert a HDF5 file to another format
+        """
         if (self.reformat == 'zarr'):
             # output zarr file
             self.HDF5_to_zarr(**kwds)
@@ -20,6 +27,9 @@ class convert():
         elif self.reformat in ('csv','txt'):
             # output reduced files to ascii formats
             self.HDF5_to_ascii(**kwds)
+        elif self.reformat in ('dataframe'):
+            # output reduced files to pandas dataframe
+            return self.HDF5_to_dataframe(**kwds)
 
     # PURPOSE: convert the HDF5 file to zarr copying all file data
     def HDF5_to_zarr(self, **kwds):
@@ -203,6 +213,74 @@ class convert():
             fid.close()
         # close the source HDF5 file
         source.close()
+
+    # PURPOSE: reduce HDF5 files to pandas dataframe
+    def HDF5_to_dataframe(self, **kwds):
+        """
+        convert the HDF5 file to a pandas dataframe copying reduced sets of data
+        """
+        # compile regular expression operator for extracting info from ICESat2 files
+        rx = re.compile(r'(processed)?(ATL\d+)(-\d{{2}})?_(\d{4})(\d{2})(\d{2})'
+            r'(\d{2})(\d{2})(\d{2})_(\d{4})(\d{2})(\d{2})_(\d{3})_(\d{2})(.*?).h5$')
+        # split extension from HDF5 file
+        # extract parameters from ICESat2 HDF5 file
+        if isinstance(self.filename, str):
+            # extract parameters from ICESat2 HDF5 file
+            SUB,PRD,HEM,YY,MM,DD,HH,MN,SS,TRK,CYCL,GRAN,RL,VERS,AUX = \
+                rx.findall(os.path.basename(self.filename)).pop()
+        else:
+            SUB,PRD,HEM,YY,MM,DD,HH,MN,SS,TRK,CYCL,GRAN,RL,VERS,AUX = \
+                rx.findall(os.path.basename(self.filename.filename)).pop()
+
+        # copy bare minimum variables from the HDF5 file to pandas data frame
+        source = h5py.File(self.filename,mode='r')
+
+        # find valid beam groups by testing for particular variables
+        if (PRD == 'ATL06'):
+            VARIABLE_PATH = ['land_ice_segments','segment_id']
+        elif (PRD == 'ATL07'):
+            VARIABLE_PATH = ['sea_ice_segments','height_segment_id']
+        elif (PRD == 'ATL08'):
+            VARIABLE_PATH = ['land_segments','segment_id_beg']
+        elif (PRD == 'ATL10'):
+            VARIABLE_PATH = ['freeboard_beam_segments','delta_time']
+        elif (PRD == 'ATL12'):
+            VARIABLE_PATH = ['ssh_segments']['delta_time']
+        # create list of valid beams within the HDF5 file
+        beams = []
+        for gtx in [k for k in source.keys() if bool(re.match(r'gt\d[lr]',k))]:
+            # check if subsetted beam contains data
+            try:
+                source['/'.join([gtx,*VARIABLE_PATH])]
+            except KeyError:
+                pass
+            else:
+                beams.append(gtx)
+
+        # for each valid beam within the HDF5 file
+        frames = []
+        for gtx in sorted(beams):
+            # create a column stack of valid output segment values
+            if (PRD == 'ATL06'):
+                var = source[gtx]['land_ice_segments']
+                valid, = np.nonzero(var['h_li'][:] != var['h_li'].fillvalue)
+                # variables for the output dataframe
+                vnames = ['segment_id','delta_time','latitude','longitude',
+                    'h_li','h_li_sigma','atl06_quality_summary']
+                data = {key:var[key][valid] for key in vnames}
+                # copy filename parameters
+                data['rgt'] = [TRK]*len(valid)
+                data['cycle'] = [CYCL]*len(valid)
+                # copy beam-level attributes
+                attrs = ['groundtrack_id','atlas_spot_number','atlas_beam_type',
+                    'sc_orientation','atmosphere_profile','atlas_pce']
+                for att_name in attrs:
+                    att_val=self.attributes_encoder(source[gtx].attrs[att_name])
+                    data[att_name] = [att_val]*len(valid)
+                # pandas dataframe from compiled dictionary
+                frames.append(pandas.DataFrame.from_dict(data))
+        # return the concatenated pandas dataframe
+        return pandas.concat(frames)
 
     # PURPOSE: encoder for copying the file attributes
     def attributes_encoder(self, attr):

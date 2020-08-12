@@ -3,6 +3,7 @@ import time
 import io
 import re
 import json
+import pandas
 import numpy as np
 import os
 import pprint
@@ -443,6 +444,7 @@ class Granules:
 
         # extract HDF5 file from zip and locally convert to new format
         reformat = output_kwds.pop('convert') if ('convert' in output_kwds.keys()) else None
+        output = []
 
         # DevNote: Temporary. Hard code the orderID info files here. order_fn should be consistent with place_order.
 
@@ -493,8 +495,9 @@ class Granules:
                         # rewind to start of file
                         hdf5_file.seek(0)
                         # locally convert data from HDF5 to a new format
-                        ipxconvert.convert(filename=hdf5_file, directory=path,
-                            reformat=reformat, **output_kwds)
+                        converter = ipxconvert.convert(filename=hdf5_file,
+                            directory=path, reformat=reformat)
+                        output.append(converter.file_converter(**output_kwds))
                     else:
                         # extract HDF5 file from zip and save to path
                         z.extract(member=zfile, path=path)
@@ -510,3 +513,7 @@ class Granules:
             os.remove(downid_fn)
 
         print("Download complete")
+        # return concatenated pandas data frame if converting
+        if (reformat == 'dataframe'):
+            # return the concatenated pandas dataframe
+            return pandas.concat(output)

@@ -4,6 +4,7 @@ geopandas
 h5py
 matplotlib
 numpy
+pandas
 pre-commit
 requests
 shapely
