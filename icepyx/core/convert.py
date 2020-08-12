@@ -155,10 +155,15 @@ class convert():
                     'h_li','h_li_sigma']
                 vformat = ('{1:0.0f}{0}{2:0.9f}{0}{3:0.9f}{0}{4:0.9f}{0}'
                     '{5:0.9f}{0}{6:0.9f}')
-                # extract attributes for each variable
+                # extract variables and attributes for each variable
+                values = {}
                 vattrs = {}
                 for i,v in enumerate(vnames):
+                    # convert data to numpy array for HDF5 compatibility
+                    values[v] = np.copy(var[v][:])
+                    # extract attributes
                     vattrs[v] = {atn:atv for atn,atv in var[v].attrs.items()}
+                    # add precision attributes for ascii yaml header
                     if (v == 'segment_id'):
                         vattrs[v]['precision'] = 'integer'
                         vattrs[v]['units'] = 'count'
@@ -166,7 +171,7 @@ class convert():
                         vattrs[v]['precision'] = 'double_precision'
                     vattrs[v]['comments'] = 'column {0:d}'.format(i+1)
                 # column stack of valid output segment values
-                output = np.column_stack([var[v][valid] for v in vnames])
+                output = np.column_stack([values[v][valid] for v in vnames])
 
             # output ascii file
             ascii_file = '{0}_{1}.{2}'.format(fileBasename,gtx,self.reformat)
@@ -267,7 +272,12 @@ class convert():
                 # variables for the output dataframe
                 vnames = ['segment_id','delta_time','latitude','longitude',
                     'h_li','h_li_sigma','atl06_quality_summary']
-                data = {key:var[key][valid] for key in vnames}
+                # extract data to dictionary
+                data = {}
+                # convert data to numpy array for backwards HDF5 compatibility
+                for v in vnames:
+                    values = np.copy(var[v][:])
+                    data[v] = values[valid]
                 # copy filename parameters
                 data['rgt'] = [TRK]*len(valid)
                 data['cycle'] = [CYCL]*len(valid)
