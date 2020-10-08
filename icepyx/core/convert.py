@@ -133,7 +133,7 @@ class convert():
         elif (PRD == 'ATL10'):
             VARIABLE_PATH = ['freeboard_beam_segments','delta_time']
         elif (PRD == 'ATL12'):
-            VARIABLE_PATH = ['ssh_segments']['delta_time']
+            VARIABLE_PATH = ['ssh_segments','delta_time']
         # create list of valid beams within the HDF5 file
         beams = []
         for gtx in [k for k in source.keys() if bool(re.match(r'gt\d[lr]',k))]:
@@ -149,6 +149,7 @@ class convert():
         for gtx in sorted(beams):
             # create a column stack of valid output segment values
             if (PRD == 'ATL06'):
+                # land ice height
                 var = source[gtx]['land_ice_segments']
                 valid, = np.nonzero(var['atl06_quality_summary'][:] == 0)
                 # variables for the output ascii file
@@ -171,8 +172,37 @@ class convert():
                     else:
                         vattrs[v]['precision'] = 'double_precision'
                     vattrs[v]['comments'] = 'column {0:d}'.format(i+1)
-                # column stack of valid output segment values
-                output = np.column_stack([values[v][valid] for v in vnames])
+            elif (PRD == 'ATL08'):
+                # land and vegetation height
+                var = source[gtx]['land_segments']
+                valid, = np.nonzero(var['terrain/h_te_best_fit'][:] !=
+                    var['terrain/h_te_best_fit'].fillvalue)
+                # variables for the output ascii file
+                vnames = ['segment_id_beg','segment_id_end','delta_time',
+                    'latitude','longitude','terrain/h_te_best_fit',
+                    'terrain/h_te_uncertainty','terrain/terrain_slope',
+                    'canopy/h_canopy','canopy/h_canopy_uncertainty']
+                vformat = ('{1:0.0f}{0}{2:0.0f}{0}{3:0.9f}{0}{4:0.9f}{0}'
+                    '{5:0.9f}{0}{6:0.9f}{0}{7:0.9f}{0}{8:0.9f}{0}{9:0.9f}{0}'
+                    '{10:0.9f}')
+                # extract variables and attributes for each variable
+                values = {}
+                vattrs = {}
+                for i,v in enumerate(vnames):
+                    # convert data to numpy array for HDF5 compatibility
+                    values[v] = np.copy(var[v][:])
+                    # extract attributes
+                    vattrs[v] = {atn:atv for atn,atv in var[v].attrs.items()}
+                    # add precision attributes for ascii yaml header
+                    if v in ('segment_id_beg','segment_id_end'):
+                        vattrs[v]['precision'] = 'integer'
+                        vattrs[v]['units'] = 'count'
+                    else:
+                        vattrs[v]['precision'] = 'double_precision'
+                    vattrs[v]['comments'] = 'column {0:d}'.format(i+1)
+
+            # column stack of valid output segment values
+            output = np.column_stack([values[v][valid] for v in vnames])
 
             # output ascii file
             ascii_file = '{0}_{1}.{2}'.format(fileBasename,gtx,self.reformat)
@@ -251,7 +281,7 @@ class convert():
         elif (PRD == 'ATL10'):
             VARIABLE_PATH = ['freeboard_beam_segments','delta_time']
         elif (PRD == 'ATL12'):
-            VARIABLE_PATH = ['ssh_segments']['delta_time']
+            VARIABLE_PATH = ['ssh_segments','delta_time']
         # create list of valid beams within the HDF5 file
         beams = []
         for gtx in [k for k in source.keys() if bool(re.match(r'gt\d[lr]',k))]:
